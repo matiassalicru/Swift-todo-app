@@ -120,6 +120,46 @@ final class TaskStore: ObservableObject {
         save()
     }
 
+    func moveSection(withId sectionId: UUID, toActiveIndex destinationActiveIndex: Int) {
+        let active = activeSections
+        guard let sourceActiveIndex = active.firstIndex(where: { $0.id == sectionId }),
+              sourceActiveIndex != destinationActiveIndex,
+              destinationActiveIndex >= 0,
+              destinationActiveIndex < active.count else { return }
+
+        // Find and remove the section from the main array
+        guard let sourceIndex = sections.firstIndex(where: { $0.id == sectionId }) else { return }
+        let moved = sections.remove(at: sourceIndex)
+
+        // Recompute active indices after removal
+        let activeAfterRemoval = sections.enumerated().filter { !$0.element.isArchived }
+
+        // Find the real insertion index
+        let realIndex: Int
+        if destinationActiveIndex < activeAfterRemoval.count {
+            realIndex = activeAfterRemoval[destinationActiveIndex].offset
+        } else {
+            // Insert after the last active section
+            if let last = activeAfterRemoval.last {
+                realIndex = last.offset + 1
+            } else {
+                realIndex = 0
+            }
+        }
+
+        sections.insert(moved, at: realIndex)
+        save()
+    }
+
+    func moveTask(_ task: Task, fromSection source: Section, toSectionId destinationId: UUID) {
+        guard let sIndex = sections.firstIndex(where: { $0.id == source.id }),
+              let tIndex = sections[sIndex].tasks.firstIndex(where: { $0.id == task.id }),
+              let dIndex = sections.firstIndex(where: { $0.id == destinationId }) else { return }
+        let removed = sections[sIndex].tasks.remove(at: tIndex)
+        sections[dIndex].tasks.append(removed)
+        save()
+    }
+
     private func save() {
         guard let data = try? JSONEncoder().encode(sections) else {
             // #region agent log

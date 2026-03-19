@@ -1,10 +1,13 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct ContentView: View {
     @EnvironmentObject var store: TaskStore
+    @AppStorage("isDarkMode") private var isDarkMode = false
     @State private var newSectionTitle = ""
     @State private var isAddingSection = false
     @State private var archivedGroupCollapsed = true
+    @State private var draggingSectionId: UUID? = nil
     @FocusState private var sectionInputFocused: Bool
 
     var body: some View {
@@ -13,7 +16,7 @@ struct ContentView: View {
 
             ScrollView(.vertical, showsIndicators: false) {
                 LazyVStack(spacing: 10) {
-                    ForEach(store.activeSections) { section in
+                    ForEach(Array(store.activeSections.enumerated()), id: \.element.id) { index, section in
                         SectionView(
                             section: section,
                             onToggleTask: { task in store.toggleTask(task, inSection: section) },
@@ -23,9 +26,21 @@ struct ContentView: View {
                             onUpdateTitle: { title in store.updateSectionTitle(section, title: title) },
                             onUpdateTask: { task, title in store.updateTask(task, title: title, inSection: section) },
                             onArchive: { store.archiveSection(section) },
-                            onUnarchive: {}
+                            onUnarchive: {},
+                            otherActiveSections: store.activeSections.filter { $0.id != section.id }.map { (id: $0.id, title: $0.title) },
+                            onMoveTask: { task, destinationId in store.moveTask(task, fromSection: section, toSectionId: destinationId) }
                         )
                         .id(section.id.uuidString + "-active")
+                        .opacity(draggingSectionId == section.id ? 0.5 : 1.0)
+                        .onDrag {
+                            draggingSectionId = section.id
+                            return NSItemProvider(object: section.id.uuidString as NSString)
+                        }
+                        .onDrop(of: [.text], delegate: SectionDropDelegate(
+                            targetIndex: index,
+                            store: store,
+                            draggingSectionId: $draggingSectionId
+                        ))
                     }
                 }
                 .padding(.horizontal, 16)
@@ -76,6 +91,7 @@ struct ContentView: View {
         }
         .frame(minWidth: 360, minHeight: 500)
         .background(AppColors.background)
+        .preferredColorScheme(isDarkMode ? .dark : .light)
     }
 
     private var headerView: some View {
@@ -95,6 +111,22 @@ struct ContentView: View {
                 }
             }
             Spacer()
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    isDarkMode.toggle()
+                }
+            }) {
+                Circle()
+                    .fill(AppColors.violet.opacity(0.12))
+                    .frame(width: 36, height: 36)
+                    .overlay(
+                        Image(systemName: isDarkMode ? "sun.max.fill" : "moon.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(AppColors.violet)
+                    )
+            }
+            .buttonStyle(.plain)
+            .contentShape(Circle())
             Circle()
                 .fill(AppColors.violet.opacity(0.12))
                 .frame(width: 36, height: 36)
@@ -230,6 +262,27 @@ struct ContentView: View {
         newSectionTitle = ""
         isAddingSection = false
     }
+}
+
+struct SectionDropDelegate: DropDelegate {
+    let targetIndex: Int
+    let store: TaskStore
+    @Binding var draggingSectionId: UUID?
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        guard let sectionId = draggingSectionId else { return false }
+        withAnimation(.spring(duration: 0.3)) {
+            store.moveSection(withId: sectionId, toActiveIndex: targetIndex)
+        }
+        draggingSectionId = nil
+        return true
+    }
+
+    func dropExited(info: DropInfo) {}
 }
 
 private enum AppColors {

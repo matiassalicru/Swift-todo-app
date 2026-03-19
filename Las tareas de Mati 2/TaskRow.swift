@@ -5,6 +5,8 @@ struct TaskRow: View {
     let onToggle: () -> Void
     let onDelete: () -> Void
     let onUpdate: (String) -> Void
+    var availableSections: [(id: UUID, title: String)] = []
+    var onMove: (UUID) -> Void = { _ in }
 
     @State private var isHovered = false
     @State private var isEditing = false
@@ -101,6 +103,20 @@ struct TaskRow: View {
             Button("Cancelar", role: .cancel) {}
         } message: {
             Text("Esta acción eliminará la tarea permanentemente.")
+        }
+        .contextMenu {
+            if !availableSections.isEmpty {
+                Menu("Mover a...") {
+                    ForEach(availableSections, id: \.id) { section in
+                        Button(section.title) {
+                            onMove(section.id)
+                        }
+                    }
+                }
+            }
+            Button("Eliminar", role: .destructive) {
+                onDelete()
+            }
         }
     }
 

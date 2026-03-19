@@ -11,6 +11,8 @@ struct SectionView: View {
     let onArchive: () -> Void
     let onUnarchive: () -> Void
     let defaultCollapsed: Bool
+    var otherActiveSections: [(id: UUID, title: String)] = []
+    var onMoveTask: (Task, UUID) -> Void = { _, _ in }
 
     @State private var newTaskTitle = ""
     @State private var isHeaderHovered = false
@@ -30,7 +32,9 @@ struct SectionView: View {
         onUpdateTask: @escaping (Task, String) -> Void,
         onArchive: @escaping () -> Void,
         onUnarchive: @escaping () -> Void,
-        defaultCollapsed: Bool = false
+        defaultCollapsed: Bool = false,
+        otherActiveSections: [(id: UUID, title: String)] = [],
+        onMoveTask: @escaping (Task, UUID) -> Void = { _, _ in }
     ) {
         self.section = section
         self.onToggleTask = onToggleTask
@@ -42,6 +46,8 @@ struct SectionView: View {
         self.onArchive = onArchive
         self.onUnarchive = onUnarchive
         self.defaultCollapsed = defaultCollapsed
+        self.otherActiveSections = otherActiveSections
+        self.onMoveTask = onMoveTask
         _isCollapsed = State(initialValue: defaultCollapsed)
     }
 
@@ -87,7 +93,9 @@ struct SectionView: View {
                                 task: task,
                                 onToggle: { onToggleTask(task) },
                                 onDelete: { onDeleteTask(task) },
-                                onUpdate: { title in onUpdateTask(task, title) }
+                                onUpdate: { title in onUpdateTask(task, title) },
+                                availableSections: otherActiveSections,
+                                onMove: { destinationId in onMoveTask(task, destinationId) }
                             )
                         }
                     }
