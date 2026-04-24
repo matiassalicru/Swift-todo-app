@@ -1,50 +1,39 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
-struct ContentView: View {
+struct TasksContentView: View {
     @EnvironmentObject var store: TaskStore
-    @AppStorage("isDarkMode") private var isDarkMode = false
+    @Binding var allSectionsCollapsed: Bool
+
     @State private var newSectionTitle = ""
     @State private var isAddingSection = false
     @State private var archivedGroupCollapsed = true
-    @State private var draggingSectionId: UUID? = nil
+    @State private var scrollToSectionId: UUID? = nil
     @FocusState private var sectionInputFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
-            headerView
-
-            ScrollView(.vertical, showsIndicators: false) {
-                LazyVStack(spacing: 10) {
-                    ForEach(Array(store.activeSections.enumerated()), id: \.element.id) { index, section in
-                        SectionView(
-                            section: section,
-                            onToggleTask: { task in store.toggleTask(task, inSection: section) },
-                            onDeleteTask: { task in store.deleteTask(task, fromSection: section) },
-                            onAddTask: { title in store.addTask(title: title, toSection: section) },
-                            onDeleteSection: { store.deleteSection(section) },
-                            onUpdateTitle: { title in store.updateSectionTitle(section, title: title) },
-                            onUpdateTask: { task, title in store.updateTask(task, title: title, inSection: section) },
-                            onArchive: { store.archiveSection(section) },
-                            onUnarchive: {},
-                            otherActiveSections: store.activeSections.filter { $0.id != section.id }.map { (id: $0.id, title: $0.title) },
-                            onMoveTask: { task, destinationId in store.moveTask(task, fromSection: section, toSectionId: destinationId) }
-                        )
-                        .id(section.id.uuidString + "-active")
-                        .opacity(draggingSectionId == section.id ? 0.5 : 1.0)
-                        .onDrag {
-                            draggingSectionId = section.id
-                            return NSItemProvider(object: section.id.uuidString as NSString)
+            ScrollViewReader { scrollProxy in
+                ScrollView(.vertical, showsIndicators: false) {
+                    LazyVStack(spacing: 10) {
+                        ForEach(store.activeSections) { section in
+                            SectionView(section: section, allCollapsed: allSectionsCollapsed, onTaskAdded: {
+                                withAnimation(.easeOut(duration: 0.3)) {
+                                    scrollProxy.scrollTo("addTask-\(section.id)", anchor: .bottom)
+                                }
+                            })
+                            .id(section.id.uuidString + "-active")
                         }
-                        .onDrop(of: [.text], delegate: SectionDropDelegate(
-                            targetIndex: index,
-                            store: store,
-                            draggingSectionId: $draggingSectionId
-                        ))
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 50)
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 16)
+                .onChange(of: scrollToSectionId) { _, sectionId in
+                    guard let sectionId else { return }
+                    withAnimation(.easeOut(duration: 0.3)) {
+                        scrollProxy.scrollTo(sectionId.uuidString + "-active", anchor: .bottom)
+                    }
+                    scrollToSectionId = nil
+                }
             }
 
             VStack(spacing: 0) {
@@ -59,18 +48,7 @@ struct ContentView: View {
                         ScrollView(.vertical, showsIndicators: false) {
                             LazyVStack(spacing: 10) {
                                 ForEach(store.archivedSections) { section in
-                                    SectionView(
-                                        section: section,
-                                        onToggleTask: { task in store.toggleTask(task, inSection: section) },
-                                        onDeleteTask: { task in store.deleteTask(task, fromSection: section) },
-                                        onAddTask: { _ in },
-                                        onDeleteSection: { store.deleteSection(section) },
-                                        onUpdateTitle: { title in store.updateSectionTitle(section, title: title) },
-                                        onUpdateTask: { task, title in store.updateTask(task, title: title, inSection: section) },
-                                        onArchive: {},
-                                        onUnarchive: { store.unarchiveSection(section) },
-                                        defaultCollapsed: true
-                                    )
+                                    SectionView(section: section, defaultCollapsed: true)
                                     .id(section.id.uuidString + "-archived")
                                 }
                             }
@@ -87,58 +65,8 @@ struct ContentView: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 10)
             }
-            .background(Color(NSColor.controlBackgroundColor))
+            .background(.thinMaterial.opacity(0.7))
         }
-        .frame(minWidth: 360, minHeight: 500)
-        .background(AppColors.background)
-        .preferredColorScheme(isDarkMode ? .dark : .light)
-    }
-
-    private var headerView: some View {
-        HStack(alignment: .firstTextBaseline) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Tareas")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .foregroundColor(AppColors.text)
-                if store.totalPendingCount > 0 {
-                    Text("\(store.totalPendingCount) pendiente\(store.totalPendingCount == 1 ? "" : "s")")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundColor(AppColors.violet.opacity(0.7))
-                } else {
-                    Text("Todo listo")
-                        .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundColor(AppColors.success.opacity(0.8))
-                }
-            }
-            Spacer()
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.25)) {
-                    isDarkMode.toggle()
-                }
-            }) {
-                Circle()
-                    .fill(AppColors.violet.opacity(0.12))
-                    .frame(width: 36, height: 36)
-                    .overlay(
-                        Image(systemName: isDarkMode ? "sun.max.fill" : "moon.fill")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(AppColors.violet)
-                    )
-            }
-            .buttonStyle(.plain)
-            .contentShape(Circle())
-            Circle()
-                .fill(AppColors.violet.opacity(0.12))
-                .frame(width: 36, height: 36)
-                .overlay(
-                    Image(systemName: "checkmark")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(AppColors.violet)
-                )
-        }
-        .padding(.horizontal, 20)
-        .padding(.top, 22)
-        .padding(.bottom, 14)
     }
 
     private var archivedGroupHeader: some View {
@@ -150,29 +78,29 @@ struct ContentView: View {
             }) {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundColor(AppColors.textSecondary)
+                    .foregroundColor(AppTheme.textSecondary)
                     .rotationEffect(.degrees(archivedGroupCollapsed ? -90 : 0))
                     .animation(.spring(duration: 0.25), value: archivedGroupCollapsed)
                     .frame(width: 24, height: 24)
-                    .background(Circle().fill(AppColors.textSecondary.opacity(0.08)))
+                    .background(Circle().fill(Color.primary.opacity(0.08)))
             }
             .buttonStyle(.plain)
             .contentShape(Circle())
 
             Image(systemName: "archivebox")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(AppColors.textSecondary)
+                .foregroundColor(AppTheme.textSecondary)
 
             Text("Archivados")
                 .font(.system(size: 13, weight: .semibold, design: .rounded))
-                .foregroundColor(AppColors.textSecondary)
+                .foregroundColor(AppTheme.textSecondary)
 
             Text("\(store.archivedSections.count)")
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
-                .foregroundColor(AppColors.textSecondary)
+                .foregroundColor(AppTheme.textSecondary)
                 .padding(.horizontal, 7)
                 .padding(.vertical, 2)
-                .background(AppColors.textSecondary.opacity(0.1))
+                .background(AppTheme.textSecondary.opacity(0.1))
                 .clipShape(Capsule())
 
             Spacer()
@@ -187,12 +115,12 @@ struct ContentView: View {
                 HStack(spacing: 10) {
                     HStack(spacing: 8) {
                         Circle()
-                            .fill(AppColors.violet.opacity(0.5))
+                            .fill(AppTheme.violet.opacity(0.5))
                             .frame(width: 7, height: 7)
-                        TextField("Nombre de la sección...", text: $newSectionTitle)
+                        TextField("Nombre de la seccion...", text: $newSectionTitle)
                             .textFieldStyle(.plain)
                             .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .foregroundColor(AppColors.text)
+                            .foregroundColor(AppTheme.text)
                             .focused($sectionInputFocused)
                             .onSubmit { addSection() }
                     }
@@ -201,7 +129,11 @@ struct ContentView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: 16)
-                            .strokeBorder(AppColors.violet.opacity(0.45), lineWidth: 1.5)
+                            .fill(.ultraThinMaterial)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .strokeBorder(AppTheme.violet.opacity(0.5), lineWidth: 1)
+                            )
                     )
                     .contentShape(Rectangle())
                     .onTapGesture { sectionInputFocused = true }
@@ -209,9 +141,9 @@ struct ContentView: View {
                     Button(action: cancelAddSection) {
                         Image(systemName: "xmark")
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(AppColors.textSecondary)
+                            .foregroundColor(AppTheme.textSecondary)
                             .frame(width: 24, height: 24)
-                            .background(Circle().fill(AppColors.textSecondary.opacity(0.08)))
+                            .background(Circle().fill(Color.primary.opacity(0.08)))
                     }
                     .buttonStyle(.plain)
                     .contentShape(Circle())
@@ -221,17 +153,21 @@ struct ContentView: View {
                     HStack(spacing: 8) {
                         Image(systemName: "plus")
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundColor(AppColors.violet.opacity(0.75))
-                        Text("Nueva sección")
+                            .foregroundColor(AppTheme.violet.opacity(0.75))
+                        Text("Nueva seccion")
                             .font(.system(size: 13, weight: .medium, design: .rounded))
-                            .foregroundColor(AppColors.violet.opacity(0.75))
+                            .foregroundColor(AppTheme.violet.opacity(0.75))
                     }
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .background(
                         RoundedRectangle(cornerRadius: 16)
-                            .strokeBorder(AppColors.violet.opacity(0.35), lineWidth: 1.5)
+                            .fill(.ultraThinMaterial)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 16)
+                                    .strokeBorder(AppTheme.violet.opacity(0.25), lineWidth: 1)
+                            )
                     )
                     .contentShape(Rectangle())
                 }
@@ -259,36 +195,11 @@ struct ContentView: View {
             return
         }
         store.addSection(title: title)
+        let newSectionId = store.activeSections.last?.id
         newSectionTitle = ""
         isAddingSection = false
-    }
-}
-
-struct SectionDropDelegate: DropDelegate {
-    let targetIndex: Int
-    let store: TaskStore
-    @Binding var draggingSectionId: UUID?
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        guard let sectionId = draggingSectionId else { return false }
-        withAnimation(.spring(duration: 0.3)) {
-            store.moveSection(withId: sectionId, toActiveIndex: targetIndex)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            scrollToSectionId = newSectionId
         }
-        draggingSectionId = nil
-        return true
     }
-
-    func dropExited(info: DropInfo) {}
-}
-
-private enum AppColors {
-    static let violet = Color(red: 0.62, green: 0.52, blue: 0.98)
-    static let success = Color(red: 0.25, green: 0.80, blue: 0.55)
-    static let background = Color(NSColor.windowBackgroundColor)
-    static let text = Color(NSColor.labelColor)
-    static let textSecondary = Color(NSColor.secondaryLabelColor)
 }

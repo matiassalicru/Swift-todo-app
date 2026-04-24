@@ -14,4 +14,13 @@ struct Task: Identifiable, Codable {
         self.createdAt = Date()
         self.updatedAt = Date()
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        title = try container.decode(String.self, forKey: .title)
+        isCompleted = try container.decode(Bool.self, forKey: .isCompleted)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+    }
 }

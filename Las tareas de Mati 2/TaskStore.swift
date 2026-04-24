@@ -1,28 +1,32 @@
 import Foundation
 import Combine
+import SwiftUI
+import UniformTypeIdentifiers
+
+struct SectionsDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+
+    let data: Data
+
+    init(sections: [Section]) {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        self.data = (try? encoder.encode(sections)) ?? Data()
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        self.data = configuration.file.regularFileContents ?? Data()
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: data)
+    }
+}
 
 final class TaskStore: ObservableObject {
     @Published var sections: [Section] = []
 
     private let saveURL: URL
-
-    // #region agent log
-    private let debugLogPath = "/tmp/debug-bae0c3.log"
-    private func debugLog(message: String, data: [String: Any] = [:], hypothesisId: String = "") {
-        let payload: [String: Any] = ["sessionId": "bae0c3", "timestamp": Date().timeIntervalSince1970 * 1000, "message": message, "data": data, "hypothesisId": hypothesisId, "location": "TaskStore.swift"]
-        guard let json = try? JSONSerialization.data(withJSONObject: payload),
-              var line = String(data: json, encoding: .utf8) else { return }
-        line += "\n"
-        guard let lineData = line.data(using: .utf8) else { return }
-        if FileManager.default.fileExists(atPath: debugLogPath) {
-            if let handle = FileHandle(forWritingAtPath: debugLogPath) {
-                handle.seekToEndOfFile(); handle.write(lineData); handle.closeFile()
-            }
-        } else {
-            FileManager.default.createFile(atPath: debugLogPath, contents: lineData)
-        }
-    }
-    // #endregion
 
     init() {
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
@@ -52,28 +56,14 @@ final class TaskStore: ObservableObject {
     }
 
     func archiveSection(_ section: Section) {
-        // #region agent log
-        let foundIndex = sections.firstIndex(where: { $0.id == section.id })
-        debugLog(message: "archiveSection called", data: ["sectionId": section.id.uuidString, "sectionTitle": section.title, "sectionIsArchived": section.isArchived, "foundIndex": foundIndex as Any, "totalSections": sections.count], hypothesisId: "H-A,H-B,H-E")
-        // #endregion
-        guard let index = foundIndex else { return }
+        guard let index = sections.firstIndex(where: { $0.id == section.id }) else { return }
         sections[index].isArchived = true
-        // #region agent log
-        debugLog(message: "archiveSection: sections[index].isArchived set to true", data: ["index": index, "newIsArchived": sections[index].isArchived], hypothesisId: "H-D")
-        // #endregion
         save()
     }
 
     func unarchiveSection(_ section: Section) {
-        // #region agent log
-        let foundIndex = sections.firstIndex(where: { $0.id == section.id })
-        debugLog(message: "unarchiveSection called", data: ["sectionId": section.id.uuidString, "sectionTitle": section.title, "sectionIsArchived": section.isArchived, "foundIndex": foundIndex as Any, "totalSections": sections.count], hypothesisId: "H-A,H-B,H-E")
-        // #endregion
-        guard let index = foundIndex else { return }
+        guard let index = sections.firstIndex(where: { $0.id == section.id }) else { return }
         sections[index].isArchived = false
-        // #region agent log
-        debugLog(message: "unarchiveSection: sections[index].isArchived set to false", data: ["index": index, "newIsArchived": sections[index].isArchived], hypothesisId: "H-D")
-        // #endregion
         save()
     }
 
@@ -103,6 +93,7 @@ final class TaskStore: ObservableObject {
         guard let sIndex = sections.firstIndex(where: { $0.id == section.id }) else { return }
         guard let tIndex = sections[sIndex].tasks.firstIndex(where: { $0.id == task.id }) else { return }
         sections[sIndex].tasks[tIndex].isCompleted.toggle()
+        sections[sIndex].tasks[tIndex].updatedAt = Date()
         save()
     }
 
@@ -120,34 +111,16 @@ final class TaskStore: ObservableObject {
         save()
     }
 
-    func moveSection(withId sectionId: UUID, toActiveIndex destinationActiveIndex: Int) {
-        let active = activeSections
-        guard let sourceActiveIndex = active.firstIndex(where: { $0.id == sectionId }),
-              sourceActiveIndex != destinationActiveIndex,
-              destinationActiveIndex >= 0,
-              destinationActiveIndex < active.count else { return }
-
-        // Find and remove the section from the main array
-        guard let sourceIndex = sections.firstIndex(where: { $0.id == sectionId }) else { return }
-        let moved = sections.remove(at: sourceIndex)
-
-        // Recompute active indices after removal
-        let activeAfterRemoval = sections.enumerated().filter { !$0.element.isArchived }
-
-        // Find the real insertion index
-        let realIndex: Int
-        if destinationActiveIndex < activeAfterRemoval.count {
-            realIndex = activeAfterRemoval[destinationActiveIndex].offset
+    func importSections(from url: URL, replacing: Bool) {
+        guard url.startAccessingSecurityScopedResource() else { return }
+        defer { url.stopAccessingSecurityScopedResource() }
+        guard let data = try? Data(contentsOf: url),
+              let decoded = try? JSONDecoder().decode([Section].self, from: data) else { return }
+        if replacing {
+            sections = decoded
         } else {
-            // Insert after the last active section
-            if let last = activeAfterRemoval.last {
-                realIndex = last.offset + 1
-            } else {
-                realIndex = 0
-            }
+            sections.append(contentsOf: decoded)
         }
-
-        sections.insert(moved, at: realIndex)
         save()
     }
 
@@ -161,29 +134,22 @@ final class TaskStore: ObservableObject {
     }
 
     private func save() {
-        guard let data = try? JSONEncoder().encode(sections) else {
-            // #region agent log
-            debugLog(message: "save() FAILED: JSONEncoder encode failed", data: [:], hypothesisId: "H-C")
-            // #endregion
-            return
-        }
-        do {
-            try data.write(to: saveURL, options: .atomic)
-            // #region agent log
-            debugLog(message: "save() succeeded", data: ["savedSectionsCount": sections.count, "archivedCount": sections.filter { $0.isArchived }.count], hypothesisId: "H-C")
-            // #endregion
-        } catch {
-            // #region agent log
-            debugLog(message: "save() FAILED: write error", data: ["error": error.localizedDescription], hypothesisId: "H-C")
-            // #endregion
-        }
+        guard loadedSuccessfully || sections.contains(where: { !$0.tasks.isEmpty }) else { return }
+        guard let data = try? JSONEncoder().encode(sections) else { return }
+        try? data.write(to: saveURL, options: .atomic)
     }
 
+    private var loadedSuccessfully = false
+
     private func load() {
-        guard
-            let data = try? Data(contentsOf: saveURL),
-            let decoded = try? JSONDecoder().decode([Section].self, from: data)
-        else { return }
+        guard let data = try? Data(contentsOf: saveURL) else { return }
+        guard let decoded = try? JSONDecoder().decode([Section].self, from: data) else {
+            // Backup del archivo si falla el decode para no perder datos
+            let backupURL = saveURL.deletingLastPathComponent().appendingPathComponent("tareas_backup.json")
+            try? data.write(to: backupURL, options: .atomic)
+            return
+        }
         sections = decoded
+        loadedSuccessfully = true
     }
 }

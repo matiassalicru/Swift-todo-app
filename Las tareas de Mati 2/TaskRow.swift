@@ -15,95 +15,131 @@ struct TaskRow: View {
     @FocusState private var editFocused: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
-            Button(action: onToggle) {
-                ZStack {
-                    Circle()
-                        .fill(Color.clear)
-                        .frame(width: 20, height: 20)
-                    Circle()
-                        .strokeBorder(
-                            task.isCompleted ? RowColors.violet : RowColors.border,
-                            lineWidth: 1.5
-                        )
-                        .frame(width: 20, height: 20)
-                    if task.isCompleted {
-                        Circle()
-                            .fill(RowColors.violet)
-                            .frame(width: 20, height: 20)
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                }
-                .contentShape(Circle())
-                .animation(.spring(response: 0.25, dampingFraction: 0.7), value: task.isCompleted)
-            }
-            .buttonStyle(.plain)
+        Group {
+            if showDeleteConfirmation {
+                HStack(spacing: 10) {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.white)
 
-            VStack(alignment: .leading, spacing: 2) {
-                if isEditing {
-                    TextField("", text: $editingText)
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 13, weight: .regular, design: .rounded))
-                        .foregroundColor(RowColors.text)
-                        .focused($editFocused)
-                        .onSubmit { commitEdit() }
-                        .onChange(of: editFocused) { focused in
-                            if !focused { commitEdit() }
+                    Text("¿Eliminar \"\(task.title)\"?")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundColor(.white)
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    Button("Cancelar") {
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            showDeleteConfirmation = false
                         }
-                } else {
-                    Text(task.title)
-                        .font(.system(size: 13, weight: .regular, design: .rounded))
-                        .strikethrough(task.isCompleted, color: RowColors.textSecondary)
-                        .foregroundColor(task.isCompleted ? RowColors.textSecondary : RowColors.text)
-                        .lineLimit(2)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .animation(.easeInOut(duration: 0.15), value: task.isCompleted)
-                        .onTapGesture(count: 2) { startEditing() }
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundColor(.white.opacity(0.8))
 
-                    Text(relativeDate(task.createdAt))
-                        .font(.system(size: 10, design: .rounded))
-                        .foregroundColor(RowColors.textSecondary.opacity(0.6))
+                    Button("Eliminar") { onDelete() }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .background(Capsule().fill(Color.white.opacity(0.2)))
                 }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.red.opacity(0.75)))
+            } else {
+                HStack(spacing: 12) {
+                    Button(action: onToggle) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.clear)
+                                .frame(width: 20, height: 20)
+                            Circle()
+                                .strokeBorder(
+                                    task.isCompleted ? AppTheme.violet : AppTheme.border,
+                                    lineWidth: 1.5
+                                )
+                                .frame(width: 20, height: 20)
+                            if task.isCompleted {
+                                Circle()
+                                    .fill(AppTheme.violet)
+                                    .frame(width: 20, height: 20)
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                        .contentShape(Circle())
+                        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: task.isCompleted)
+                    }
+                    .buttonStyle(.plain)
 
-            if isHovered && !isEditing {
-                Button(action: { showDeleteConfirmation = true }) {
-                    ZStack {
-                        Circle()
-                            .fill(Color(NSColor.separatorColor).opacity(0.4))
-                            .frame(width: 20, height: 20)
-                        Image(systemName: "xmark")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundColor(RowColors.textSecondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        if isEditing {
+                            TextField("", text: $editingText)
+                                .textFieldStyle(.plain)
+                                .font(.system(size: 13, weight: .regular, design: .rounded))
+                                .foregroundColor(AppTheme.text)
+                                .focused($editFocused)
+                                .onSubmit { commitEdit() }
+                                .onChange(of: editFocused) {_, focused in
+                                    if !focused { commitEdit() }
+                                }
+                        } else {
+                            Text(task.title)
+                                .font(.system(size: 13, weight: .regular, design: .rounded))
+                                .strikethrough(task.isCompleted, color: AppTheme.textSecondary)
+                                .foregroundColor(task.isCompleted ? AppTheme.textSecondary : AppTheme.text)
+                                .lineLimit(2)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .animation(.easeInOut(duration: 0.15), value: task.isCompleted)
+                                .onTapGesture(count: 2) { startEditing() }
+
+                            Text(relativeDate(task.createdAt))
+                                .font(.system(size: 10, design: .rounded))
+                                .foregroundColor(AppTheme.textSecondary.opacity(0.6))
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    if isHovered && !isEditing {
+                        Button(action: {
+                            withAnimation(.easeInOut(duration: 0.15)) {
+                                showDeleteConfirmation = true
+                            }
+                        }) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.primary.opacity(0.08))
+                                    .frame(width: 20, height: 20)
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 8, weight: .bold))
+                                    .foregroundColor(AppTheme.textSecondary)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .transition(.opacity.combined(with: .scale(scale: 0.7)))
                     }
                 }
-                .buttonStyle(.plain)
-                .transition(.opacity.combined(with: .scale(scale: 0.7)))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(isEditing ? AppTheme.violet.opacity(0.1) : (isHovered ? Color.primary.opacity(0.06) : Color.clear))
+                )
+                .animation(.easeInOut(duration: 0.1), value: isHovered)
+                .animation(.easeInOut(duration: 0.1), value: isEditing)
+                .contentShape(Rectangle())
+                .onHover { hovering in
+                    withAnimation(.easeInOut(duration: 0.1)) {
+                        isHovered = hovering
+                    }
+                }
             }
         }
-        .padding(.horizontal, 6)
-        .padding(.vertical, 7)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(isEditing ? RowColors.editBackground : (isHovered ? RowColors.hoverBackground : Color.clear))
-        )
-        .animation(.easeInOut(duration: 0.1), value: isHovered)
-        .animation(.easeInOut(duration: 0.1), value: isEditing)
-        .contentShape(Rectangle())
-        .onHover { hovering in
-            withAnimation(.easeInOut(duration: 0.1)) {
-                isHovered = hovering
-            }
-        }
-        .alert("Eliminar \"\(task.title)\"", isPresented: $showDeleteConfirmation) {
-            Button("Eliminar", role: .destructive) { onDelete() }
-            Button("Cancelar", role: .cancel) {}
-        } message: {
-            Text("Esta acción eliminará la tarea permanentemente.")
-        }
+        .animation(.easeInOut(duration: 0.15), value: showDeleteConfirmation)
         .contextMenu {
             if !availableSections.isEmpty {
                 Menu("Mover a...") {
@@ -142,13 +178,4 @@ struct TaskRow: View {
         formatter.locale = Locale.current
         return formatter.localizedString(for: date, relativeTo: Date())
     }
-}
-
-private enum RowColors {
-    static let violet = Color(red: 0.62, green: 0.52, blue: 0.98)
-    static let text = Color(NSColor.labelColor)
-    static let textSecondary = Color(NSColor.secondaryLabelColor)
-    static let border = Color(NSColor.separatorColor)
-    static let hoverBackground = Color(NSColor.separatorColor).opacity(0.25)
-    static let editBackground = Color(red: 0.62, green: 0.52, blue: 0.98).opacity(0.07)
 }
