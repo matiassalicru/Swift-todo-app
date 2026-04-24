@@ -1,8 +1,8 @@
 import SwiftUI
 
 enum AppTheme {
-    // Brand
-    static let violet = Color(red: 0.62, green: 0.52, blue: 0.98)
+    // Brand — dynamic accent, resolved from ThemeManager
+    static var violet: Color { ThemeManager.shared.accentColor }
     static let success = Color(red: 0.25, green: 0.80, blue: 0.55)
 
     // Text
