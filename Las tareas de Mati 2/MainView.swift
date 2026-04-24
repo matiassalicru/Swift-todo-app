@@ -16,6 +16,7 @@ enum AppTab: String, CaseIterable {
 struct MainView: View {
     @EnvironmentObject var store: TaskStore
     @EnvironmentObject var noteStore: NoteStore
+    @EnvironmentObject var themeManager: ThemeManager
     @AppStorage("isDarkMode") private var isDarkMode = false
     @State private var selectedTab: AppTab = .tasks
     @State private var allSectionsCollapsed = false
@@ -23,6 +24,7 @@ struct MainView: View {
     @State private var showingImportOptions = false
     @State private var importFileURL: URL?
     @State private var showingExportPicker = false
+    @State private var showingAccentPicker = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -130,6 +132,8 @@ struct MainView: View {
             .contentShape(Circle())
             .help(isDarkMode ? "Modo claro" : "Modo oscuro")
 
+            accentColorMenu
+
             if selectedTab == .tasks {
                 Button(action: { showingImportPicker = true }) {
                     ZStack {
@@ -194,6 +198,69 @@ struct MainView: View {
         .padding(.top, 22)
         .padding(.bottom, 8)
         .animation(.easeInOut(duration: 0.2), value: selectedTab)
+    }
+
+    private var accentColorMenu: some View {
+        Button(action: { showingAccentPicker.toggle() }) {
+            ZStack {
+                Circle()
+                    .fill(.ultraThinMaterial)
+                    .frame(width: 36, height: 36)
+                Circle()
+                    .strokeBorder(AppTheme.glassBorder, lineWidth: 0.5)
+                    .frame(width: 36, height: 36)
+                Image(systemName: "circle.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(themeManager.accentColor)
+            }
+        }
+        .buttonStyle(.plain)
+        .contentShape(Circle())
+        .help("Color de acento")
+        .popover(isPresented: $showingAccentPicker, arrowEdge: .bottom) {
+            accentColorPicker
+        }
+    }
+
+    private var accentColorPicker: some View {
+        let columns = [GridItem(.adaptive(minimum: 36), spacing: 8)]
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("Color de acento")
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundColor(AppTheme.textSecondary)
+
+            LazyVGrid(columns: columns, spacing: 8) {
+                ForEach(AccentColor.allCases) { accentOption in
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            themeManager.accent = accentOption
+                        }
+                        showingAccentPicker = false
+                    }) {
+                        ZStack {
+                            Circle()
+                                .fill(accentOption.color)
+                                .frame(width: 28, height: 28)
+                                .shadow(color: accentOption.color.opacity(0.5), radius: 4)
+
+                            if themeManager.accent == accentOption {
+                                Circle()
+                                    .strokeBorder(Color.white, lineWidth: 2)
+                                    .frame(width: 28, height: 28)
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundColor(.white)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .contentShape(Circle())
+                    .help(accentOption.displayName)
+                }
+            }
+        }
+        .padding(14)
+        .frame(width: 200)
     }
 
     @ViewBuilder

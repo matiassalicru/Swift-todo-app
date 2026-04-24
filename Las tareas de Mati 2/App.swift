@@ -13,21 +13,34 @@ struct TareasApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var delegate
     @StateObject private var store = TaskStore()
     @StateObject private var noteStore = NoteStore()
+    @StateObject private var themeManager = ThemeManager.shared
 
     var body: some Scene {
         WindowGroup(id: "main-window") {
             MainView()
                 .environmentObject(store)
                 .environmentObject(noteStore)
+                .environmentObject(themeManager)
         }
         .windowStyle(.titleBar)
         .windowToolbarStyle(.unified)
         .defaultSize(width: 380, height: 520)
+        .commands {
+            #if DEBUG
+            CommandGroup(after: .newItem) {
+                Button("Exportar íconos de la app…") {
+                    AppIconExporter.promptAndExport()
+                }
+                .keyboardShortcut("E", modifiers: [.command, .shift])
+            }
+            #endif
+        }
 
         MenuBarExtra(store.totalPendingCount > 0 ? "\(store.totalPendingCount)" : "", systemImage: "checkmark.circle") {
             MenuBarContentView()
                 .environmentObject(store)
                 .environmentObject(noteStore)
+                .environmentObject(themeManager)
         }
         .menuBarExtraStyle(.window)
     }
@@ -35,6 +48,7 @@ struct TareasApp: App {
 
 private struct MenuBarContentView: View {
     @EnvironmentObject var store: TaskStore
+    @EnvironmentObject var themeManager: ThemeManager
     @AppStorage("isDarkMode") private var isDarkMode = false
     @State private var allSectionsCollapsed = false
 
